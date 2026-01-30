@@ -6,6 +6,8 @@ on:
   workflow_dispatch: {}   
 
 jobs:
+  env:
+    TZ: Asia/Shanghai
   run:
     runs-on: ubuntu-latest
     steps:
