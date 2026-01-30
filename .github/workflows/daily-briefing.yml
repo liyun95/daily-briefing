@@ -2,30 +2,22 @@ name: Daily Briefing to Feishu
 
 on:
   schedule:
-    - cron: "0 0 * * *"  # UTC 00:00 = Asia/Shanghai 08:00
-  workflow_dispatch: {}   
+    - cron: "0 0 * * *"   # UTC 00:00 = Asia/Shanghai 08:00
+  workflow_dispatch: {}
 
 jobs:
-  env:
-    TZ: Asia/Shanghai
   run:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    env:
+      TZ: Asia/Shanghai
+      FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install deps
-        run: |
+      - run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Run briefing
-        env:
-          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
-        run: |
-          python daily_briefing.py
+      - run: python daily_briefing.py
