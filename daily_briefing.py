@@ -6,7 +6,9 @@ import feedparser
 from datetime import datetime
 
 FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "").strip()
-if not FEISHU_WEBHOOK:
+DRY_RUN = os.getenv("DRY_RUN") == "1"
+
+if not FEISHU_WEBHOOK and not DRY_RUN:
     raise SystemExit("Missing env FEISHU_WEBHOOK")
 
 CHENGDU_LAT = 30.5728
@@ -14,11 +16,11 @@ CHENGDU_LON = 104.0668
 
 TRENDING_FEEDS = [
     ("🔥 HN", "https://hnrss.org/frontpage"),
-    ("🌍 World", "https://www.reddit.com/r/worldnews/top/.rss?t=day"),
-    ("💻 Tech", "https://www.reddit.com/r/technology/top/.rss?t=day"),
-    ("🤖 ML", "https://www.reddit.com/r/MachineLearning/.rss"),
-    ("🤖 AI", "https://www.reddit.com/r/artificial/top/.rss?t=day"),
-    ("🌍 BBC", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+    ("💻 TechCrunch", "https://techcrunch.com/feed/"),
+    ("🤖 VentureBeat", "https://venturebeat.com/category/ai/feed/"),
+    ("⚡ Ars Technica", "https://feeds.arstechnica.com/arstechnica/technology-lab"),
+    ("📱 The Verge", "https://www.theverge.com/rss/index.xml"),
+    ("🔬 MIT Tech", "https://www.technologyreview.com/feed/"),
 ]
 
 DAY_NAMES = {
@@ -190,7 +192,7 @@ def build_card(dt: datetime, weather_tuple, trend_items):
 
     elements.append({
         "tag": "note",
-        "elements": [{"tag": "plain_text", "content": "弟弟出品｜数据来源：HN / Reddit / BBC RSS"}]
+        "elements": [{"tag": "plain_text", "content": "弟弟出品｜数据来源：HN / TechCrunch / VentureBeat / Ars Technica"}]
     })
 
     return {
@@ -218,7 +220,7 @@ def main():
     payload = build_card(dt, weather, trends)
 
     # 本地调试：DRY_RUN=1 只打印卡片 JSON，不发送
-    if os.getenv("DRY_RUN") == "1":
+    if DRY_RUN:
         import json
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
