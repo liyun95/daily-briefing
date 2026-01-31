@@ -2,7 +2,7 @@ name: Daily Briefing to Feishu
 
 on:
   schedule:
-    - cron: "0 0 * * *"   # UTC 00:00 = Asia/Shanghai 08:00
+    - cron: "*/10 * * * *"   # run every 10 min; guard in job
   workflow_dispatch: {}
 
 jobs:
@@ -13,11 +13,66 @@ jobs:
       FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
 
     steps:
+      - name: Compute run window
+        id: timeguard
+        run: |
+          run_date=$(date +%F)
+          run_hour=$(date +%H)
+          run_min=$(date +%-M)  # use %-M to strip leading zero
+          echo "RUN_DATE=${run_date}" >> "$GITHUB_ENV"
+
+          force_send=false
+          in_window=false
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            force_send=true
+          fi
+
+          if [ "$run_hour" = "09" ] && [ "$run_min" -le 30 ]; then
+            in_window=true
+          fi
+
+          echo "force_send=${force_send}" >> "$GITHUB_OUTPUT"
+          echo "in_window=${in_window}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        if: steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true'
+
+      - name: Restore daily send cache
+        id: send_cache
+        if: steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true'
+        uses: actions/cache@v4
+        with:
+          path: .run-cache
+          key: daily-briefing-${{ env.RUN_DATE }}
+
       - uses: actions/setup-python@v5
+        if: |
+          (steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true')
+          && (steps.send_cache.outputs.cache-hit != 'true' || steps.timeguard.outputs.force_send == 'true')
         with:
           python-version: "3.11"
-      - run: |
+
+      - name: Install dependencies
+        if: |
+          (steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true')
+          && (steps.send_cache.outputs.cache-hit != 'true' || steps.timeguard.outputs.force_send == 'true')
+        run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - run: python daily_briefing.py
+
+      - name: Run daily briefing
+        id: send_briefing
+        if: |
+          (steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true')
+          && (steps.send_cache.outputs.cache-hit != 'true' || steps.timeguard.outputs.force_send == 'true')
+        run: python daily_briefing.py
+
+      - name: Mark sent for today
+        if: |
+          steps.send_briefing.outcome == 'success'
+          && (steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true')
+          && (steps.send_cache.outputs.cache-hit != 'true' || steps.timeguard.outputs.force_send == 'true')
+        run: |
+          mkdir -p .run-cache
+          echo "${RUN_DATE}" > .run-cache/sent
