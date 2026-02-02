@@ -2,7 +2,7 @@ name: Daily Briefing to Feishu
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # run every 10 min; guard in job
+    - cron: "*/5 0-2 * * *"   # every 5 min during 00–02 UTC (08–10 Shanghai)
   workflow_dispatch: {}
 
 jobs:
@@ -28,7 +28,7 @@ jobs:
             force_send=true
           fi
 
-          if [ "$run_hour" = "09" ] && [ "$run_min" -le 30 ]; then
+          if ([ "$run_hour" = "08" ] && [ "$run_min" -ge 30 ]) || [ "$run_hour" = "09" ]; then
             in_window=true
           fi
 
