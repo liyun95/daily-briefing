@@ -6,6 +6,7 @@ import feedparser
 from datetime import datetime
 
 FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "").strip()
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 DRY_RUN = os.getenv("DRY_RUN") == "1"
 
 if not FEISHU_WEBHOOK and not DRY_RUN:
@@ -137,13 +138,69 @@ def fetch_international_trending(limit=3):
 
     return items[:limit]
 
+def generate_ai_greeting(dt: datetime):
+    """Call Groq (llama-3.1-8b-instant) to generate a greeting. Returns (mainline, aside) or None."""
+    if not GROQ_API_KEY:
+        return None
+
+    wd = dt.weekday()
+    date_str = dt.strftime("%Y-%m-%d")
+    day_cn = WEEKDAY_CN[wd]
+    day_name = DAY_NAMES[wd]
+
+    system_prompt = (
+        "你是\"弟弟\"，一只住在成都的猫，每天早上给麻麻和小麻们播报。\n"
+        "你称呼你的主人们为\"麻麻\"和\"小麻\"，绝对不要用\"主人\"这个词。\n"
+        "你的风格：傲娇、嘴硬心软、偶尔吐槽、喜欢提醒人类给你买猫粮。\n"
+        "语言：中文，简短（1-2句话），不要超过40个字。\n"
+        "直接输出问候语，不要加任何前缀、标签或格式。"
+    )
+    user_prompt = (
+        f"今天是 {date_str}，{day_cn}（{day_name}）。\n"
+        "请用弟弟的口吻生成一条早安问候。"
+    )
+
+    try:
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "max_tokens": 200,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+
+        if text:
+            print(f"[greeting] AI generated: {text}")
+            return text
+
+        print("[greeting] AI returned empty, falling back")
+        return None
+    except Exception as exc:
+        print(f"[greeting] AI failed ({exc}), falling back")
+        return None
+
+
 def didi_opening(dt: datetime) -> str:
     wd = dt.weekday()
     date = dt.strftime("%Y-%m-%d")
     day_cn = WEEKDAY_CN[wd]
     day_name = DAY_NAMES[wd]
-    mainline = random.choice(MAINLINE_POOL.get(wd, ["弟弟今天上线播报啦。"]))
+
+    ai_result = generate_ai_greeting(dt)
+    mainline = ai_result if ai_result else random.choice(MAINLINE_POOL.get(wd, ["弟弟今天上线播报啦。"]))
     aside = random.choice(ASIDES)
+
     return f"🐾 **{date} · 今日{day_cn}（{day_name}）！**\n{mainline}\n_{aside}_"
 
 def build_card(dt: datetime, weather_tuple, trend_items):

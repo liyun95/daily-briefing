@@ -16,6 +16,7 @@ jobs:
     env:
       TZ: Asia/Shanghai
       FEISHU_WEBHOOK: ${{ inputs.use_dev == true && secrets.FEISHU_WEBHOOK_DEV || secrets.FEISHU_WEBHOOK }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
     steps:
       - name: Compute run window
