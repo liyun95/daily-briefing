@@ -2,7 +2,9 @@ name: Daily Briefing to Feishu
 
 on:
   schedule:
-    - cron: "*/5 0-2 * * *"   # every 5 min during 00–02 UTC (08–10 Shanghai)
+    - cron: "*/5 * * * *"     # TEMP: every 5 min for testing (remove after verification)
+    - cron: "30-59/5 0 * * *" # every 5 min during 00:30–00:59 UTC (08:30–08:59 Shanghai)
+    - cron: "0 1 * * *"       # 01:00 UTC (09:00 Shanghai)
   workflow_dispatch:
     inputs:
       use_dev:
@@ -15,70 +17,47 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Shanghai
-      FEISHU_WEBHOOK: ${{ inputs.use_dev == true && secrets.FEISHU_WEBHOOK_DEV || secrets.FEISHU_WEBHOOK }}
+      FORCE_SEND: ${{ github.event_name == 'workflow_dispatch' }}
+      USE_DEV: ${{ github.event_name == 'workflow_dispatch' && inputs.use_dev || vars.BRIEFING_USE_DEV == 'true' }}
+      FEISHU_WEBHOOK: ${{ env.USE_DEV && secrets.FEISHU_WEBHOOK_DEV || secrets.FEISHU_WEBHOOK }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
     steps:
-      - name: Compute run window
-        id: timeguard
+      - name: Compute run date
         run: |
           run_date=$(date +%F)
-          run_hour=$(date +%H)
-          run_min=$(date +%-M)  # use %-M to strip leading zero
           echo "RUN_DATE=${run_date}" >> "$GITHUB_ENV"
-
-          force_send=false
-          in_window=false
-
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            force_send=true
-          fi
-
-          if ([ "$run_hour" = "08" ] && [ "$run_min" -ge 30 ]) || [ "$run_hour" = "09" ]; then
-            in_window=true
-          fi
-
-          echo "force_send=${force_send}" >> "$GITHUB_OUTPUT"
-          echo "in_window=${in_window}" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@v4
-        if: steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true'
 
       - name: Restore daily send cache
         id: send_cache
-        if: steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true'
         uses: actions/cache@v4
         with:
           path: .run-cache
           key: daily-briefing-${{ env.RUN_DATE }}
 
+      - uses: actions/checkout@v4
+        if: steps.send_cache.outputs.cache-hit != 'true' || env.FORCE_SEND == 'true'
+
       - uses: actions/setup-python@v5
-        if: |
-          (steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true')
-          && (steps.send_cache.outputs.cache-hit != 'true' || steps.timeguard.outputs.force_send == 'true')
+        if: steps.send_cache.outputs.cache-hit != 'true' || env.FORCE_SEND == 'true'
         with:
           python-version: "3.11"
 
       - name: Install dependencies
-        if: |
-          (steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true')
-          && (steps.send_cache.outputs.cache-hit != 'true' || steps.timeguard.outputs.force_send == 'true')
+        if: steps.send_cache.outputs.cache-hit != 'true' || env.FORCE_SEND == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Run daily briefing
         id: send_briefing
-        if: |
-          (steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true')
-          && (steps.send_cache.outputs.cache-hit != 'true' || steps.timeguard.outputs.force_send == 'true')
+        if: steps.send_cache.outputs.cache-hit != 'true' || env.FORCE_SEND == 'true'
         run: python daily_briefing.py
 
       - name: Mark sent for today
         if: |
           steps.send_briefing.outcome == 'success'
-          && (steps.timeguard.outputs.in_window == 'true' || steps.timeguard.outputs.force_send == 'true')
-          && (steps.send_cache.outputs.cache-hit != 'true' || steps.timeguard.outputs.force_send == 'true')
+          && (steps.send_cache.outputs.cache-hit != 'true' || env.FORCE_SEND == 'true')
         run: |
           mkdir -p .run-cache
           echo "${RUN_DATE}" > .run-cache/sent
