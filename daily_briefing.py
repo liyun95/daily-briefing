@@ -247,9 +247,13 @@ def build_card(dt: datetime, weather_tuple, trend_items):
         ],
     })
 
+    run_time = dt.strftime("%Y-%m-%d %H:%M") + " (GMT+8)"
     elements.append({
         "tag": "note",
-        "elements": [{"tag": "plain_text", "content": "弟弟出品｜数据来源：HN / TechCrunch / VentureBeat / Ars Technica"}]
+        "elements": [
+            {"tag": "plain_text", "content": "弟弟出品｜数据来源：HN / TechCrunch / VentureBeat / Ars Technica"},
+            {"tag": "plain_text", "content": f"触发时间：{run_time}"},
+        ],
     })
 
     return {
