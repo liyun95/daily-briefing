@@ -2,23 +2,50 @@ name: Offwork Reminder
 
 on:
   schedule:
-    - cron: "0 10 * * 1-5" # 18:00 Asia/Shanghai (UTC+8), weekdays
+    - cron: "30-59/5 9 * * 1-5" # 17:30–17:59 Asia/Shanghai (UTC+8), weekdays
+    - cron: "0-50/5 10 * * 1-5" # 18:00–18:50 Asia/Shanghai (UTC+8), weekdays
   workflow_dispatch:
 
 jobs:
   offwork-reminder:
     runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Shanghai
     steps:
+      - name: Compute run date
+        run: |
+          run_date=$(date +%F)
+          echo "RUN_DATE=${run_date}" >> "$GITHUB_ENV"
+
+      - name: Restore daily send cache
+        id: send_cache
+        uses: actions/cache@v4
+        with:
+          path: .run-cache
+          key: offwork-reminder-${{ env.RUN_DATE }}
+
       - name: Checkout
         uses: actions/checkout@v4
+        if: steps.send_cache.outputs.cache-hit != 'true'
       - name: Set up Python
         uses: actions/setup-python@v5
+        if: steps.send_cache.outputs.cache-hit != 'true'
         with:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install -r requirements.txt
+        if: steps.send_cache.outputs.cache-hit != 'true'
       - name: Send offwork reminder
+        id: send_offwork
+        if: steps.send_cache.outputs.cache-hit != 'true'
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python offwork_reminder.py
+      - name: Mark sent for today
+        if: |
+          steps.send_offwork.outcome == 'success'
+          && steps.send_cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .run-cache
+          echo "${RUN_DATE}" > .run-cache/sent

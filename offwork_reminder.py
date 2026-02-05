@@ -29,8 +29,8 @@ def shanghai_now() -> datetime:
 
 def _in_send_window(dt: datetime) -> bool:
     minutes = dt.hour * 60 + dt.minute
-    start = 17 * 60 + 45
-    end = 18 * 60 + 15
+    start = 17 * 60 + 30
+    end = 18 * 60 + 50
     return start <= minutes <= end
 
 
@@ -131,7 +131,7 @@ def main():
             print("[offwork] Skip: weekend")
             return
         if not _in_send_window(dt):
-            print("[offwork] Skip: outside send window (17:45-18:15) Shanghai time")
+            print("[offwork] Skip: outside send window (17:30-18:50) Shanghai time")
             return
 
     ai_result = generate_ai_offwork(dt)
