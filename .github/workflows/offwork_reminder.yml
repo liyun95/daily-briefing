@@ -1,4 +1,4 @@
-name: Offwork Reminder
+name: Offwork Reminder (Prod)
 
 on:
   schedule:
