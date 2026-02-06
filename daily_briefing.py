@@ -3,7 +3,9 @@ import os
 import random
 import requests
 import feedparser
-from datetime import datetime
+import calendar
+from email.utils import parsedate_to_datetime
+from datetime import datetime, timedelta, timezone
 
 FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "").strip()
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
@@ -23,6 +25,7 @@ TRENDING_FEEDS = [
     ("📱 The Verge", "https://www.theverge.com/rss/index.xml"),
     ("🔬 MIT Tech", "https://www.technologyreview.com/feed/"),
 ]
+TRENDING_MAX_AGE_HOURS = 48
 
 DAY_NAMES = {
     0: "忙 Day",
@@ -83,10 +86,35 @@ def fetch_weather_chengdu():
 def _norm_title(t: str) -> str:
     return " ".join((t or "").lower().split())
 
+def _entry_datetime(entry):
+    t = entry.get("published_parsed") or entry.get("updated_parsed")
+    if t:
+        try:
+            ts = calendar.timegm(t)
+            return datetime.fromtimestamp(ts, tz=timezone.utc)
+        except Exception:
+            pass
+
+    for key in ("published", "updated"):
+        raw = entry.get(key)
+        if not raw:
+            continue
+        try:
+            dt = parsedate_to_datetime(raw)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except Exception:
+            continue
+
+    return None
+
 def fetch_international_trending(limit=3):
     headers = {"User-Agent": "DidiDailyBriefingBot/1.0 (+https://github.com/)"}
     items = []
     seen_title = set()
+    now_utc = datetime.now(timezone.utc)
+    min_dt = now_utc - timedelta(hours=TRENDING_MAX_AGE_HOURS)
 
     bad_phrases = [
         "self-promotion",
@@ -114,6 +142,9 @@ def fetch_international_trending(limit=3):
 
             picked = None
             for e in d.entries[:10]:
+                entry_dt = _entry_datetime(e)
+                if entry_dt and entry_dt < min_dt:
+                    continue
                 title = (e.get("title") or "").strip()
                 link  = (e.get("link") or "").strip()
                 if not title or not link:
