@@ -180,8 +180,10 @@ def generate_ai_greeting(dt: datetime):
     day_name = DAY_NAMES[wd]
 
     system_prompt = (
-        "你是\"弟弟\"，一只住在成都的猫，每天早上给麻麻和小麻们播报。\n"
+        "你是\"弟弟\"，一只住在成都的猫，每天早上给麻麻和小麻播报。\n"
         "你称呼你的主人们为\"麻麻\"和\"小麻\"，绝对不要用\"主人\"这个词。\n"
+        "重要澄清：弟弟有两个麻麻，分别叫\"麻麻\"和\"小麻\"，她们是并列称呼。\n"
+        "涉及猫粮时要说让\"麻麻\"和\"小麻\"给我买/准备猫粮，绝不能说\"麻麻给小麻\"买/准备猫粮。\n"
         "你的风格：傲娇、嘴硬心软、偶尔吐槽、喜欢提醒人类给你买猫粮。\n"
         "语言：中文，简短（1-2句话），不要超过40个字。\n"
         "直接输出问候语，不要加任何前缀、标签或格式。"
@@ -222,6 +224,66 @@ def generate_ai_greeting(dt: datetime):
         return None
 
 
+def _ensure_cn_parens(text: str) -> str:
+    if not text:
+        return text
+    t = text.strip()
+    if (t.startswith("（") and t.endswith("）")) or (t.startswith("(") and t.endswith(")")):
+        t = t[1:-1].strip()
+    return f"（{t}）"
+
+
+def generate_ai_aside(dt: datetime):
+    """Call Groq (llama-3.1-8b-instant) to generate an aside. Returns aside or None."""
+    if not GROQ_API_KEY:
+        return None
+
+    date_str = dt.strftime("%Y-%m-%d")
+
+    system_prompt = (
+        "你是\"弟弟\"，一只住在成都的猫。\n"
+        "请写一句括号内的俏皮旁白，语气：轻松可爱、略带傲娇、温和吐槽。\n"
+        "必须使用中文全角括号（…）包裹整句。\n"
+        "长度控制在10-20个汉字左右。\n"
+        "必须包含以下关键词之一：猫粮、摸猫、打工、生产力、可爱。\n"
+        "不要使用\"主人\"一词。\n"
+        "如提到麻麻或小麻，她们是并列称呼，不能出现\"麻麻给小麻\"这类表述。\n"
+        "直接输出旁白内容，不要加任何前缀或解释。"
+    )
+    user_prompt = f"今天是 {date_str}，请生成一句旁白。"
+
+    try:
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "max_tokens": 120,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+
+        if text:
+            aside = _ensure_cn_parens(text)
+            print(f"[aside] AI generated: {aside}")
+            return aside
+
+        print("[aside] AI returned empty, falling back")
+        return None
+    except Exception as exc:
+        print(f"[aside] AI failed ({exc}), falling back")
+        return None
+
+
 def didi_opening(dt: datetime) -> str:
     wd = dt.weekday()
     date = dt.strftime("%Y-%m-%d")
@@ -230,7 +292,8 @@ def didi_opening(dt: datetime) -> str:
 
     ai_result = generate_ai_greeting(dt)
     mainline = ai_result if ai_result else random.choice(MAINLINE_POOL.get(wd, ["弟弟今天上线播报啦。"]))
-    aside = random.choice(ASIDES)
+    ai_aside = generate_ai_aside(dt)
+    aside = ai_aside if ai_aside else random.choice(ASIDES)
 
     return f"🐾 **{date} · 今日{day_cn}（{day_name}）！**\n{mainline}\n_{aside}_"
 
