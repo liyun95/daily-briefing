@@ -43,9 +43,7 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python offwork_reminder.py
       - name: Mark sent for today
-        if: |
-          steps.send_offwork.outcome == 'success'
-          && steps.send_cache.outputs.cache-hit != 'true'
+        if: steps.send_offwork.outputs.sent == 'true'
         run: |
           mkdir -p .run-cache
           echo "${RUN_DATE}" > .run-cache/sent

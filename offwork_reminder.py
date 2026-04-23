@@ -123,6 +123,14 @@ def send_to_feishu(payload):
     return resp
 
 
+def mark_sent():
+    path = os.environ.get("GITHUB_OUTPUT")
+    if not path:
+        return
+    with open(path, "a", encoding="utf-8") as f:
+        f.write("sent=true\n")
+
+
 def main():
     dt = shanghai_now()
 
@@ -146,6 +154,7 @@ def main():
 
     resp = send_to_feishu(payload)
     print("OK", resp)
+    mark_sent()
 
 
 if __name__ == "__main__":
