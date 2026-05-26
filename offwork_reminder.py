@@ -34,6 +34,16 @@ def _in_send_window(dt: datetime) -> bool:
     return start <= minutes <= end
 
 
+def should_send(dt: datetime, event_name: str = "", force_send: bool = False) -> bool:
+    if force_send:
+        return True
+    if dt.weekday() > 4:
+        return False
+    if event_name == "schedule":
+        return True
+    return _in_send_window(dt)
+
+
 def generate_ai_offwork(dt: datetime):
     if not GROQ_API_KEY:
         return None
@@ -133,14 +143,17 @@ def mark_sent():
 
 def main():
     dt = shanghai_now()
+    event_name = os.getenv("GITHUB_EVENT_NAME", "").strip()
 
-    if not FORCE_SEND:
+    if not should_send(dt, event_name=event_name, force_send=FORCE_SEND):
         if dt.weekday() > 4:
             print("[offwork] Skip: weekend")
-            return
-        if not _in_send_window(dt):
+        else:
             print("[offwork] Skip: outside send window (17:30-18:50) Shanghai time")
-            return
+        return
+
+    if event_name == "schedule" and not _in_send_window(dt):
+        print("[offwork] Scheduled run started late; sending because cron matched the window")
 
     ai_result = generate_ai_offwork(dt)
     message = ai_result if ai_result else random.choice(OFFWORK_POOL)
