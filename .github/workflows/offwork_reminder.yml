@@ -5,6 +5,12 @@ on:
     - cron: "30-59/5 9 * * 1-5" # 17:30–17:59 Asia/Shanghai (UTC+8), weekdays
     - cron: "0-50/5 10 * * 1-5" # 18:00–18:50 Asia/Shanghai (UTC+8), weekdays
   workflow_dispatch:
+    inputs:
+      force_send:
+        description: "Send even outside the normal weekday/time window"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   offwork-reminder:
@@ -41,6 +47,7 @@ jobs:
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          FORCE_SEND: ${{ github.event_name == 'workflow_dispatch' && inputs.force_send && '1' || '0' }}
         run: python offwork_reminder.py
       - name: Mark sent for today
         if: steps.send_offwork.outputs.sent == 'true'
